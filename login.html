@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secure Portal - Sign In</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .toast-animate {
+      animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes slideIn {
+      from { transform: translateY(-100%) scale(0.9); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 p-4 sm:p-8 min-h-screen flex flex-col items-center justify-center font-sans relative">
+
+  <!-- Custom Alert Toast Area -->
+  <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4 pointer-events-none"></div>
+
+  <!-- Main Card Container -->
+  <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md space-y-6 border border-slate-100 transition-all">
+    
+    <!-- Header Area -->
+    <div class="text-center space-y-2">
+      <div class="inline-flex bg-indigo-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-100 mb-2">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+        </svg>
+      </div>
+      <h1 id="portal-title" class="text-xl font-extrabold text-slate-800">Welcome Back</h1>
+      <p id="portal-subtitle" class="text-xs text-slate-400 font-semibold">Sign in to access your secure task workspace</p>
+    </div>
+
+    <!-- Authentication Form -->
+    <form id="auth-form" class="space-y-4">
+      <div class="space-y-1.5">
+        <label class="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">Email Address</label>
+        <input type="email" id="email" required placeholder="name@example.com" class="w-full border rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-indigo-500 border-slate-200 transition" />
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">Password</label>
+        <input type="password" id="password" required minlength="6" placeholder="••••••••" class="w-full border rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-indigo-500 border-slate-200 transition" />
+      </div>
+
+      <button type="submit" id="submit-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-3 rounded-xl font-extrabold shadow-lg shadow-indigo-100 transition duration-150">
+        Sign In Securely
+      </button>
+    </form>
+
+    <!-- Visual Separator Line -->
+    <div class="relative flex py-2 items-center">
+      <div class="flex-grow border-t border-slate-100"></div>
+      <span class="flex-shrink mx-4 text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Or Continue With</span>
+      <div class="flex-grow border-t border-slate-100"></div>
+    </div>
+
+    <!-- GitHub OAuth Button -->
+    <button onclick="signInWithGitHub()" class="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs py-3 rounded-xl font-extrabold flex items-center justify-center gap-2 transition duration-150 shadow-md">
+      <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+        <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+      </svg>
+      Sign In with GitHub
+    </button>
+
+    <!-- Toggle Portal Mode Link -->
+    <div class="text-center pt-2">
+      <button onclick="toggleMode()" id="mode-toggle-link" class="text-xs font-bold text-indigo-600 hover:text-indigo-500 transition">
+        Don't have an account? Sign up instead
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    // 💡 CONFIGURATION KEYS
+    const SUPABASE_URL = "https://yumpqsngncyttdbmqtzo.supabase.co";
+    const SUPABASE_ANON_KEY = "YOUR_ANON_KEY_HERE"; // ⚡ Paste your secure public anon key here!
+
+    // Initialize database client
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Form Target State Tracker (signin or signup)
+    let isSignInMode = true;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // If user is already authenticated, bypass the login screen and send them back to index.html
+      db.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          window.location.href = "index.html";
+        }
+      });
+
+      document.getElementById('auth-form').addEventListener('submit', handleAuthSubmit);
+    });
+
+    // 📡 GITHUB LOGIN: Triggers the secure redirect to GitHub's server
+    async function signInWithGitHub() {
+      showToast("info", "Redirecting to GitHub's secure login...");
+      
+      const { data, error } = await db.auth.signInWithOAuth({
+        provider: 'github',
+        options: {
+          // Send them back to your app's index page after success!
+          redirectTo: window.location.origin + '/index.html'
+        }
+      });
+
+      if (error) {
+        showToast("error", "GitHub login failed: " + error.message);
+      }
+    }
+
+    async function handleAuthSubmit(event) {
+      event.preventDefault();
+      
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const submitBtn = document.getElementById('submit-btn');
+
+      // Set Loading visual state
+      submitBtn.disabled = true;
+      submitBtn.textContent = isSignInMode ? "Signing In..." : "Creating Account...";
+
+      let result;
+
+      if (isSignInMode) {
+        // Mode A: Sign In Existing User
+        result = await db.auth.signInWithPassword({ email, password });
+      } else {
+        // Mode B: Register New User
+        result = await db.auth.signUp({ email, password });
+      }
+
+      const { data, error } = result;
+
+      submitBtn.disabled = false;
+      submitBtn.textContent = isSignInMode ? "Sign In Securely" : "Create My Account";
+
+      if (error) {
+        showToast("error", error.message);
+      } else {
+        if (isSignInMode) {
+          showToast("success", "Access granted! Redirecting to dashboard...");
+          setTimeout(() => {
+            window.location.href = "index.html"; // Redirect to your task list!
+          }, 1500);
+        } else {
+          if (data.user && data.session) {
+            showToast("success", "Account created successfully! Logging in...");
+            setTimeout(() => {
+              window.location.href = "index.html";
+            }, 1500);
+          } else {
+            showToast("success", "Success! Please check your email inbox for the verification link!");
+          }
+        }
+      }
+    }
+
+    // Toggles visual presentation between login and registration layouts
+    function toggleMode() {
+      isSignInMode = !isSignInMode;
+
+      const title = document.getElementById('portal-title');
+      const subtitle = document.getElementById('portal-subtitle');
+      const submitBtn = document.getElementById('submit-btn');
+      const toggleLink = document.getElementById('mode-toggle-link');
+
+      if (isSignInMode) {
+        title.textContent = "Welcome Back";
+        subtitle.textContent = "Sign in to access your secure task workspace";
+        submitBtn.textContent = "Sign In Securely";
+        toggleLink.textContent = "Don't have an account? Sign up instead";
+      } else {
+        title.textContent = "Create Account";
+        subtitle.textContent = "Sign up below to deploy your private cloud list";
+        submitBtn.textContent = "Create My Account";
+        toggleLink.textContent = "Already have an account? Sign in instead";
+      }
+    }
+
+    // Toast Notification Engine
+    function showToast(type, message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      const bgClass = type === 'success' ? 'bg-indigo-600' : (type === 'info' ? 'bg-slate-700' : 'bg-rose-600');
+      toast.className = `${bgClass} text-white text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center justify-between mb-2 pointer-events-auto toast-animate`;
+      
+      toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="ml-4 opacity-70 hover:opacity-100 font-extrabold text-sm">&times;</button>
+      `;
+      
+      container.appendChild(toast);
+      
+      // Auto dismiss after 4 seconds
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px) scale(0.95)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+  </script>
+</body>
+</html>
+```

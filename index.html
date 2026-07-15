@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Realtime Secure Task Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .toast-animate {
+      animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes slideIn {
+      from { transform: translateY(-100%) scale(0.9); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 p-4 sm:p-8 min-h-screen flex flex-col items-center justify-start font-sans relative">
+
+  <!-- Custom Alert Toast Area -->
+  <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4 pointer-events-none"></div>
+
+  <!-- Main Card Container -->
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl border border-slate-100 overflow-hidden transition-all duration-300">
+    
+    <!-- Premium Header Area -->
+    <div class="bg-indigo-900 text-white p-6 relative overflow-hidden">
+      <!-- Decorative background glow -->
+      <div class="absolute -right-10 -top-10 w-40 h-40 bg-indigo-800 rounded-full opacity-50 blur-xl"></div>
+      <div class="absolute -left-10 -bottom-10 w-40 h-40 bg-indigo-950 rounded-full opacity-50 blur-xl"></div>
+      
+      <div class="relative flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="bg-indigo-600 p-2.5 rounded-xl shadow-lg border border-indigo-500/30">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-base font-extrabold tracking-wide">Secure Task Workspace</h1>
+            <p id="user-display" class="text-[10px] text-indigo-200 font-bold truncate max-w-[200px] sm:max-w-[280px]">Checking session...</p>
+          </div>
+        </div>
+        <button onclick="handleLogout()" class="text-[10px] font-extrabold bg-indigo-950/40 hover:bg-rose-600/30 border border-indigo-700/40 px-3 py-2 rounded-xl transition duration-200">
+          Sign Out
+        </button>
+      </div>
+    </div>
+
+    <!-- Task Creation Form -->
+    <form id="task-form" class="p-6 border-b border-slate-100 bg-slate-50/50 space-y-4">
+      <div class="flex flex-col gap-1.5">
+        <label class="block text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">New Task Description</label>
+        <div class="flex gap-2">
+          <input type="text" id="task-input" required placeholder="Type a task securely..." class="w-full border rounded-xl px-4 py-2.5 text-xs outline-none focus:border-indigo-500 border-slate-200 bg-white transition shadow-sm" />
+          <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-5 py-2.5 rounded-xl font-bold shadow-md shadow-indigo-100 transition duration-150 whitespace-nowrap">
+            Add Task
+          </button>
+        </div>
+      </div>
+
+      <!-- Advanced Metadata Options Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <!-- Category Selector -->
+        <div class="space-y-1">
+          <label class="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">Category</label>
+          <select id="task-category" class="w-full border rounded-xl px-3 py-2 text-[11px] outline-none focus:border-indigo-500 border-slate-200 bg-white transition shadow-sm cursor-pointer font-bold text-slate-600">
+            <option value="Personal">🏠 Personal</option>
+            <option value="Work">💼 Work</option>
+            <option value="Urgent">🚨 Urgent</option>
+            <option value="Shopping">🛒 Shopping</option>
+          </select>
+        </div>
+
+        <!-- Priority Selector -->
+        <div class="space-y-1">
+          <label class="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">Priority</label>
+          <select id="task-priority" class="w-full border rounded-xl px-3 py-2 text-[11px] outline-none focus:border-indigo-500 border-slate-200 bg-white transition shadow-sm cursor-pointer font-bold text-slate-600">
+            <option value="Low">🟢 Low Priority</option>
+            <option value="Medium">🟡 Medium Priority</option>
+            <option value="High">🔴 High Priority</option>
+          </select>
+        </div>
+
+        <!-- Due Date Picker -->
+        <div class="space-y-1">
+          <label class="block text-[9px] font-extrabold tracking-wider text-slate-400 uppercase">Due Date</label>
+          <input type="date" id="task-duedate" class="w-full border rounded-xl px-3 py-1.5 text-[11px] outline-none focus:border-indigo-500 border-slate-200 bg-white transition shadow-sm cursor-pointer font-bold text-slate-600" />
+        </div>
+      </div>
+    </form>
+
+    <!-- Live Search & Filtering Controls -->
+    <div class="px-6 py-3 bg-slate-50/20 border-b border-slate-100 flex flex-col sm:flex-row gap-3 items-center justify-between">
+      <div class="relative w-full sm:w-48">
+        <input type="text" id="task-search" oninput="filterAndRenderTasks()" placeholder="Search tasks..." class="w-full border border-slate-200/60 rounded-lg pl-3 pr-2 py-1.5 text-[11px] outline-none focus:border-indigo-500 transition" />
+      </div>
+      <div class="flex gap-2 w-full sm:w-auto">
+        <select id="filter-category" onchange="filterAndRenderTasks()" class="border border-slate-200/60 bg-white rounded-lg px-2 py-1.5 text-[11px] outline-none text-slate-500 font-semibold cursor-pointer flex-grow sm:flex-grow-0">
+          <option value="ALL">All Categories</option>
+          <option value="Personal">🏠 Personal</option>
+          <option value="Work">💼 Work</option>
+          <option value="Urgent">🚨 Urgent</option>
+          <option value="Shopping">🛒 Shopping</option>
+        </select>
+        <select id="filter-priority" onchange="filterAndRenderTasks()" class="border border-slate-200/60 bg-white rounded-lg px-2 py-1.5 text-[11px] outline-none text-slate-500 font-semibold cursor-pointer flex-grow sm:flex-grow-0">
+          <option value="ALL">All Priorities</option>
+          <option value="Low">🟢 Low</option>
+          <option value="Medium">🟡 Medium</option>
+          <option value="High">🔴 High</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Dynamic Tasks Output -->
+    <div class="p-6 max-h-[380px] overflow-y-auto">
+      <ul id="task-list" class="space-y-3">
+        <!-- Database records render here dynamically -->
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- Premium Deletion Modal -->
+  <div id="delete-modal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white border border-slate-100 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden p-6 space-y-4 transform duration-200">
+      <div class="flex items-center gap-3 text-rose-600">
+        <div class="bg-rose-100 p-2 rounded-full">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h3 class="font-bold text-slate-900 text-base">Permanently Erase Task?</h3>
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">
+        Are you sure you want to permanently erase this task? This operation will remove it from your cloud database instantly.
+      </p>
+      <div class="flex justify-end gap-3 pt-2">
+        <button onclick="closeDeleteModal()" class="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg transition">Cancel</button>
+        <button id="confirm-delete-btn" class="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-lg shadow-md transition">Delete Task</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 💡 CONFIGURATION KEYS
+    const SUPABASE_URL = "https://yumpqsngncyttdbmqtzo.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_j-80eHm0R49-SNdkm5E80Q_iUgPDRvi"; // ⚡ Paste your secure public anon key here!
+
+    // Initialize database client
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // Global Local Cache
+    let localTasks = [];
+    let activeDeletionTaskId = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Monitor login session state
+      db.auth.getSession().then(({ data }) => {
+        if (!data.session) {
+          window.location.href = "login.html"; // Redirects unauthenticated users
+        } else {
+          document.getElementById('user-display').textContent = data.session.user.email;
+          
+          // Set default form date to tomorrow
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          document.getElementById('task-duedate').value = tomorrow.toISOString().split('T')[0];
+          
+          fetchTasks();
+          setupRealtimeSubscription(); // Starts listening to your cloud tables live!
+        }
+      });
+
+      document.getElementById('task-form').addEventListener('submit', addTask);
+    });
+
+    // 📡 REALTIME: Opens a persistent websocket connection to your table
+    function setupRealtimeSubscription() {
+      db.channel('custom-todos-channel')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, (payload) => {
+          console.log('Realtime change recognized:', payload);
+          fetchTasks(); // Instantly rebuilds your lists on-screen!
+        })
+        .subscribe();
+    }
+
+    // 1. FETCH (Read) your secure tasks
+    async function fetchTasks() {
+      const taskList = document.getElementById('task-list');
+      
+      // Only show reading state on initial load to prevent screen flickering
+      if (localTasks.length === 0) {
+        taskList.innerHTML = '<li class="text-slate-400 py-4 text-center text-xs">Reading database records...</li>';
+      }
+
+      let { data: todos, error } = await db
+        .from('todos')
+        .select('*')
+        .order('id', { ascending: false }); // Newest tasks first
+
+      if (error) {
+        taskList.innerHTML = `<li class="text-rose-500 p-2 bg-rose-50 rounded border border-rose-100 text-xs">Error: ${error.message}</li>`;
+        return;
+      }
+
+      localTasks = todos || [];
+      filterAndRenderTasks();
+    }
+
+    // 2. FILTER & RENDER dynamic arrays on the UI
+    function filterAndRenderTasks() {
+      const taskList = document.getElementById('task-list');
+      const searchQuery = document.getElementById('task-search').value.toLowerCase().trim();
+      const catFilter = document.getElementById('filter-category').value;
+      const priFilter = document.getElementById('filter-priority').value;
+
+      taskList.innerHTML = '';
+
+      // Perform compound array filtering
+      const filtered = localTasks.filter(task => {
+        const matchesSearch = !searchQuery || (task.title && task.title.toLowerCase().includes(searchQuery));
+        const matchesCategory = catFilter === 'ALL' || task.category === catFilter;
+        const matchesPriority = priFilter === 'ALL' || task.priority === priFilter;
+        return matchesSearch && matchesCategory && matchesPriority;
+      });
+
+      if (filtered.length === 0) {
+        taskList.innerHTML = '<li class="text-slate-400 py-6 text-center text-xs">No matching tasks found.</li>';
+        return;
+      }
+
+      const todayString = new Date().toISOString().split('T')[0];
+
+      filtered.forEach(task => {
+        const item = document.createElement('li');
+        item.className = "flex flex-col sm:flex-row justify-between sm:items-center bg-slate-50 hover:bg-slate-100/60 p-3.5 rounded-xl border border-slate-100 transition duration-150 group gap-3";
+        
+        const titleClass = task.is_completed ? "line-through text-slate-400 font-semibold" : "text-slate-700 font-bold";
+        
+        // Priority Badge Configurations
+        let priorityBadgeClass = "bg-slate-100 text-slate-500 border-slate-200/60";
+        if (task.priority === "High") priorityBadgeClass = "bg-rose-50 text-rose-600 border-rose-100";
+        else if (task.priority === "Medium") priorityBadgeClass = "bg-amber-50 text-amber-600 border-amber-100";
+        else if (task.priority === "Low") priorityBadgeClass = "bg-emerald-50 text-emerald-600 border-emerald-100";
+        const cleanPriority = task.priority || "Low";
+
+        // Category Icon Configurations
+        let catEmoji = "🏠";
+        if (task.category === "Work") catEmoji = "💼";
+        else if (task.category === "Urgent") catEmoji = "🚨";
+        else if (task.category === "Shopping") catEmoji = "🛒";
+        const cleanCategory = task.category || "Personal";
+
+        // Overdue Chronological Evaluation (compared to today)
+        let overdueBadge = "";
+        let cleanDateDisplay = "";
+        if (task.due_date) {
+          cleanDateDisplay = task.due_date;
+          if (task.due_date < todayString && !task.is_completed) {
+            overdueBadge = `<span class="text-[8px] px-1.5 py-0.5 rounded-md font-extrabold bg-rose-500 text-white animate-pulse">⚠️ OVERDUE</span>`;
+          }
+        } else {
+          cleanDateDisplay = "No Date Set";
+        }
+
+        item.innerHTML = `
+          <div class="flex items-center gap-3 cursor-pointer flex-grow" onclick="toggleTask('${task.id}', ${task.is_completed})">
+            <div class="w-4 h-4 rounded-md border flex items-center justify-center transition-all ${task.is_completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white group-hover:border-indigo-500'}">
+              ${task.is_completed ? '✓' : ''}
+            </div>
+            <div class="flex flex-col gap-1">
+              <span class="${titleClass} select-none text-[12px] leading-snug">${task.title}</span>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[9px] px-1.5 py-0.5 rounded bg-white text-slate-500 border border-slate-200/60 font-extrabold">${catEmoji} ${cleanCategory}</span>
+                <span class="text-[9px] px-1.5 py-0.5 rounded border font-extrabold ${priorityBadgeClass}">${cleanPriority}</span>
+                ${overdueBadge}
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 border-slate-100 pt-2 sm:pt-0">
+            <span class="text-[9px] text-slate-400 font-extrabold flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+              </svg>
+              ${cleanDateDisplay}
+            </span>
+            <button onclick="askDeleteTask('${task.id}')" class="text-slate-300 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition duration-150">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.34 6.6m-3.6 0L10.3 9m4.77-3.52 1-.36M15 11h6m-10.3-6.52 1-.36M4 7h16M4 7l1.61 12.01a2.25 2.25 0 0 0 2.24 2.24h8.3a2.25 2.25 0 0 0 2.24-2.24L20 7M8 7V4.5a2.25 2.25 0 0 1 2.25-2.25h3.5A2.25 2.25 0 0 1 16 4.5V7" />
+              </svg>
+            </button>
+          </div>
+        `;
+        taskList.appendChild(item);
+      });
+    }
+
+    // 3. INSERT (Write) a brand new task
+    async function addTask(event) {
+      event.preventDefault();
+      
+      const input = document.getElementById('task-input');
+      const category = document.getElementById('task-category').value;
+      const priority = document.getElementById('task-priority').value;
+      const duedate = document.getElementById('task-duedate').value;
+      const taskTitle = input.value;
+
+      const { data, error } = await db
+        .from('todos')
+        .insert([{ 
+          title: taskTitle,
+          category: category,
+          priority: priority,
+          due_date: duedate
+        }])
+        .select();
+
+      if (error) {
+        showToast("error", "Insert failed: " + error.message);
+      } else {
+        input.value = '';
+        showToast("success", "Secure task with metadata created!");
+      }
+    }
+
+    // 4. UPDATE (Modify) completion status
+    async function toggleTask(taskId, currentStatus) {
+      const { error } = await db
+        .from('todos')
+        .update({ is_completed: !currentStatus })
+        .eq('id', taskId);
+
+      if (error) {
+        showToast("error", "Update failed: " + error.message);
+      } else {
+        showToast("success", `Task marked as ${!currentStatus ? 'Completed' : 'Pending'}!`);
+      }
+    }
+
+    // 5. Modal Deletion Helpers
+    function askDeleteTask(taskId) {
+      activeDeletionTaskId = taskId;
+      document.getElementById('delete-modal').classList.remove('hidden');
+      document.getElementById('confirm-delete-btn').onclick = executeDeleteTask;
+    }
+
+    function closeDeleteModal() {
+      document.getElementById('delete-modal').classList.add('hidden');
+      activeDeletionTaskId = null;
+    }
+
+    async function executeDeleteTask() {
+      if (!activeDeletionTaskId) return;
+
+      const { error } = await db
+        .from('todos')
+        .delete()
+        .eq('id', activeDeletionTaskId);
+
+      closeDeleteModal();
+
+      if (error) {
+        showToast("error", "Deletion failed: " + error.message);
+      } else {
+        showToast("success", "Task safely erased from cloud database.");
+      }
+    }
+
+    // 6. SIGN OUT user session
+    async function handleLogout() {
+      await db.auth.signOut();
+      window.location.reload();
+    }
+
+    // Toast Notification Engine
+    function showToast(type, message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      const bgClass = type === 'success' ? 'bg-indigo-600' : 'bg-rose-600';
+      toast.className = `${bgClass} text-white text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center justify-between mb-2 pointer-events-auto toast-animate`;
+      
+      toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="ml-4 opacity-70 hover:opacity-100 font-extrabold text-sm">&times;</button>
+      `;
+      
+      container.appendChild(toast);
+      
+      // Auto dismiss after 4 seconds
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px) scale(0.95)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+  </script>
+</body>
+</html>
