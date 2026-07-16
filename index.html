@@ -24,6 +24,9 @@
       background: #cbd5e1;
       border-radius: 9999px;
     }
+    .avatar-hover:hover .camera-overlay {
+      opacity: 1;
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 p-4 sm:p-8 min-h-screen flex flex-col items-center justify-start font-sans relative">
@@ -34,19 +37,39 @@
   <!-- Main Card Container -->
   <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl border border-slate-100 overflow-hidden transition-all duration-300">
     
-    <!-- Premium Header Area -->
+    <!-- Premium Header Area with Profile Picture Upload -->
     <div class="bg-indigo-900 text-white p-6 relative overflow-hidden">
       <!-- Decorative background glow -->
       <div class="absolute -right-10 -top-10 w-40 h-40 bg-indigo-800 rounded-full opacity-50 blur-xl"></div>
       <div class="absolute -left-10 -bottom-10 w-40 h-40 bg-indigo-950 rounded-full opacity-50 blur-xl"></div>
       
       <div class="relative flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="bg-indigo-600 p-2.5 rounded-xl shadow-lg border border-indigo-500/30">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
+        <div class="flex items-center gap-4">
+          <!-- Clickable Avatar Container -->
+          <div class="relative w-12 h-12 rounded-2xl overflow-hidden bg-indigo-950 border-2 border-indigo-500/30 shadow-lg cursor-pointer avatar-hover" onclick="triggerAvatarUpload()">
+            <!-- Loading Spinner State -->
+            <div id="avatar-loader" class="hidden absolute inset-0 bg-slate-900/60 z-10 flex items-center justify-center">
+              <svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            
+            <!-- Hover Camera Overlay -->
+            <div class="camera-overlay absolute inset-0 bg-slate-900/60 opacity-0 transition-opacity flex items-center justify-center text-white text-[10px] font-bold z-10">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15a2.25 2.25 0 0 0 2.25-2.25V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+              </svg>
+            </div>
+
+            <!-- Profile Image Element -->
+            <img id="user-avatar" src="https://placehold.co/100x100/4f46e5/ffffff?text=Avatar" class="w-full h-full object-cover" alt="Avatar">
           </div>
+
+          <!-- Hidden File Input -->
+          <input type="file" id="avatar-input" accept="image/*" class="hidden" onchange="uploadAvatarFile(event)">
+
           <div>
             <h1 class="text-base font-extrabold tracking-wide">Secure Task Workspace</h1>
             <p id="user-display" class="text-[10px] text-indigo-200 font-bold truncate max-w-[200px] sm:max-w-[280px]">Checking session...</p>
@@ -164,6 +187,7 @@
     // Global Local Cache
     let localTasks = [];
     let activeDeletionTaskId = null;
+    let activeUser = null;
 
     document.addEventListener('DOMContentLoaded', () => {
       // Monitor login session state
@@ -171,7 +195,11 @@
         if (!data.session) {
           window.location.href = "login.html"; // Redirects unauthenticated users
         } else {
-          document.getElementById('user-display').textContent = data.session.user.email;
+          activeUser = data.session.user;
+          document.getElementById('user-display').textContent = activeUser.email;
+          
+          // Load existing avatar picture
+          loadUserAvatar();
           
           // Set default form date to tomorrow
           const tomorrow = new Date();
@@ -200,7 +228,6 @@
     async function fetchTasks() {
       const taskList = document.getElementById('task-list');
       
-      // Only show reading state on initial load to prevent screen flickering
       if (localTasks.length === 0) {
         taskList.innerHTML = '<li class="text-slate-400 py-4 text-center text-xs">Reading database records...</li>';
       }
@@ -228,7 +255,6 @@
 
       taskList.innerHTML = '';
 
-      // Perform compound array filtering
       const filtered = localTasks.filter(task => {
         const matchesSearch = !searchQuery || (task.title && task.title.toLowerCase().includes(searchQuery));
         const matchesCategory = catFilter === 'ALL' || task.category === catFilter;
@@ -249,21 +275,18 @@
         
         const titleClass = task.is_completed ? "line-through text-slate-400 font-semibold" : "text-slate-700 font-bold";
         
-        // Priority Badge Configurations
         let priorityBadgeClass = "bg-slate-100 text-slate-500 border-slate-200/60";
         if (task.priority === "High") priorityBadgeClass = "bg-rose-50 text-rose-600 border-rose-100";
         else if (task.priority === "Medium") priorityBadgeClass = "bg-amber-50 text-amber-600 border-amber-100";
         else if (task.priority === "Low") priorityBadgeClass = "bg-emerald-50 text-emerald-600 border-emerald-100";
         const cleanPriority = task.priority || "Low";
 
-        // Category Icon Configurations
         let catEmoji = "🏠";
         if (task.category === "Work") catEmoji = "💼";
         else if (task.category === "Urgent") catEmoji = "🚨";
         else if (task.category === "Shopping") catEmoji = "🛒";
         const cleanCategory = task.category || "Personal";
 
-        // Overdue Chronological Evaluation (compared to today)
         let overdueBadge = "";
         let cleanDateDisplay = "";
         if (task.due_date) {
@@ -379,6 +402,71 @@
       }
     }
 
+    // 🌁 CLOUD STORAGE (AVATAR UPLOADS) PIPELINE
+    
+    // Trigger file selector click
+    function triggerAvatarUpload() {
+      document.getElementById('avatar-input').click();
+    }
+
+    // Upload selected file to cloud bucket
+    async function uploadAvatarFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      // Loading visual state ON
+      document.getElementById('avatar-loader').classList.remove('hidden');
+
+      const filePath = `public/${activeUser.id}_profile_pic.png`;
+
+      // 1. Upload binary file to 'avatars' storage bucket
+      const { data, error } = await db.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          upsert: true // Overwrite if it already exists
+        });
+
+      if (error) {
+        showToast("error", "Avatar upload failed: " + error.message);
+        document.getElementById('avatar-loader').classList.add('hidden');
+        return;
+      }
+
+      showToast("success", "Profile picture updated successfully!");
+      
+      // 2. Refresh display image
+      loadUserAvatar();
+    }
+
+    // Render the uploaded image from our storage bucket path
+    async function loadUserAvatar() {
+      if (!activeUser) return;
+      
+      const filePath = `public/${activeUser.id}_profile_pic.png`;
+      const avatarImg = document.getElementById('user-avatar');
+
+      // Check if file exists by fetching public URL with cache busting timestamp
+      const { data: { publicUrl } } = db.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // Append timestamp query parameter to prevent browser cache from serving old image
+      const timestampedUrl = `${publicUrl}?t=${new Date().getTime()}`;
+
+      // Set image source and shut off loader once loaded
+      avatarImg.onload = () => {
+        document.getElementById('avatar-loader').classList.add('hidden');
+      };
+      
+      avatarImg.onerror = () => {
+        // Fallback default avatar if none uploaded
+        avatarImg.src = "https://placehold.co/100x100/4f46e5/ffffff?text=Avatar";
+        document.getElementById('avatar-loader').classList.add('hidden');
+      };
+
+      avatarImg.src = timestampedUrl;
+    }
+
     // 6. SIGN OUT user session
     async function handleLogout() {
       await db.auth.signOut();
@@ -400,7 +488,6 @@
       
       container.appendChild(toast);
       
-      // Auto dismiss after 4 seconds
       setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateY(-20px) scale(0.95)';
