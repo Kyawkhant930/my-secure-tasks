@@ -79,7 +79,7 @@
   <script>
     // 💡 CONFIGURATION KEYS
     const SUPABASE_URL = "https://yumpqsngncyttdbmqtzo.supabase.co";
-    const SUPABASE_ANON_KEY = "YOUR_ANON_KEY_HERE"; // ⚡ Paste your secure public anon key here!
+    const SUPABASE_ANON_KEY = "sb_publishable_j-80eHm0R49-SNdkm5E80Q_iUgPDRvi"; // ⚡ Paste your secure public anon key here!
 
     // Initialize database client
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -102,11 +102,15 @@
     async function signInWithGitHub() {
       showToast("info", "Redirecting to GitHub's secure login...");
       
+      // 💡 DYNAMIC ROUTING FIX: Automatically targets "index.html" in the same folder path,
+      // supporting local file testing AND GitHub Pages subfolders dynamically!
+      const currentUrlClean = window.location.href.split('#')[0].split('?')[0];
+      const dynamicRedirectUrl = currentUrlClean.replace("login.html", "index.html");
+
       const { data, error } = await db.auth.signInWithOAuth({
         provider: 'github',
         options: {
-          // Send them back to your app's index page after success!
-          redirectTo: window.location.origin + '/index.html'
+          redirectTo: dynamicRedirectUrl
         }
       });
 
@@ -210,4 +214,3 @@
   </script>
 </body>
 </html>
-```
